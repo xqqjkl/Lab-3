@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Лабораторная 3 — Вариант 3</title>
+<style>
+  :root { --bg:#1e1f22; --panel:#2b2d31; --fg:#e6e6e6; --accent:#4a9eff; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Segoe UI", Arial, sans-serif;
+         background:var(--bg); color:var(--fg); font-size:14px; }
+  header { padding:10px 16px; background:var(--panel); border-bottom:1px solid #3a3d42;
+           display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  header .hint { color:#9aa0a6; font-size:12px; }
+  main { display:grid; grid-template-columns: 1fr 1fr 320px;
+         gap:12px; padding:12px; }
+  .panel { background:var(--panel); border:1px solid #3a3d42; border-radius:6px;
+           padding:8px; }
+  .panel h2 { font-size:13px; margin:0 0 6px 0; color:#9aa0a6;
+              text-transform:uppercase; letter-spacing:.5px; }
+  .canvas-wrap { position:relative; width:100%; height:360px; background:#111;
+                 display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  canvas { max-width:100%; max-height:100%; }
+  #chart { width:100%; height:200px; display:block; background:#111; border-radius:4px; }
+  .controls { display:flex; flex-direction:column; gap:10px; }
+  fieldset { border:1px solid #3a3d42; border-radius:6px; padding:8px 10px; }
+  legend { font-size:12px; color:#9aa0a6; padding:0 4px; }
+  label { display:flex; align-items:center; justify-content:space-between;
+          gap:8px; margin:4px 0; }
+  label > span:first-child { flex:1; }
+  input[type=range] { width:100%; }
+  .val { color:var(--accent); font-variant-numeric: tabular-nums;
+         min-width:48px; text-align:right; }
+  button { background:var(--accent); color:#fff; border:none; border-radius:4px;
+           padding:7px 10px; cursor:pointer; font-size:13px; }
+  button.secondary { background:#3a3d42; }
+  button:hover { filter:brightness(1.15); }
+  button:disabled { opacity:.4; cursor:not-allowed; }
+  .btns { display:flex; gap:6px; flex-wrap:wrap; }
+  .btns button { flex:1 1 auto; }
+  .status { font-size:12px; color:#9aa0a6; min-height:18px; }
+  #drop { border:2px dashed #4a4d52; border-radius:6px; padding:12px;
+          text-align:center; color:#9aa0a6; cursor:pointer; }
+  #drop.hover { border-color:var(--accent); color:var(--accent); }
+  @media (max-width: 1100px) {
+    main { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Лабораторная 3 — Вариант 3</h1>
+  <span class="hint">Гистограмма + контрастирование &nbsp;|&nbsp; Высокочастотные фильтры (резкость)</span>
+</header>
+
+<main>
+  <!-- Левая колонка: изображения -->
+  <div class="panel">
+    <h2>Исходное изображение</h2>
+    <div class="canvas-wrap">
+      <canvas id="cv-src"></canvas>
+    </div>
+    <div id="drop">Перетащите изображение сюда или нажмите, чтобы выбрать файл</div>
+  </div>
+
+  <div class="panel">
+    <h2>Результат</h2>
+    <div class="canvas-wrap">
+      <canvas id="cv-dst"></canvas>
+    </div>
+    <div class="btns" style="margin-top:8px;">
+      <button class="secondary" id="btn-download" disabled>Скачать результат (PNG)</button>
+    </div>
+  </div>
+
+  <!-- Правая колонка: управление -->
+  <div class="panel controls">
+    <h2>Управление</h2>
+
+    <fieldset>
+      <legend>Метод 1: гистограмма и контраст</legend>
+      <div class="btns">
+        <button id="btn-linear">Линейное контрастирование</button>
+        <button id="btn-eq-rgb">Эквализация RGB</button>
+        <button id="btn-eq-hsv">Эквализация HSV (V)</button>
+      </div>
+      <label>
+        <span>min</span>
+        <input id="sl-min" type="range" min="0" max="255" value="0">
+        <span class="val" id="v-min">0</span>
+      </label>
+      <label>
+        <span>max</span>
+        <input id="sl-max" type="range" min="0" max="255" value="255">
+        <span class="val" id="v-max">255</span>
+      </label>
+      <label>
+        <input type="checkbox" id="chk-auto" checked>
+        <span style="flex:1">Авто-диапазон (1%–99%)</span>
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Метод 2: высокочастотные фильтры</legend>
+      <label>
+        <span>amount</span>
+        <input id="sl-amount" type="range" min="0" max="30" value="10">
+        <span class="val" id="v-amount">1.0</span>
+      </label>
+      <label>
+        <span>sigma</span>
+        <input id="sl-sigma" type="range" min="5" max="30" value="10">
+        <span class="val" id="v-sigma">1.0</span>
+      </label>
+      <div class="btns">
+        <button id="btn-unsharp">Резкость (unsharp mask)</button>
+        <button id="btn-laplacian" class="secondary">Лапласиан</button>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Гистограмма</legend>
+      <canvas id="chart"></canvas>
+      <div class="btns" style="margin-top:6px;">
+        <button class="secondary" id="btn-reset">Сброс к исходному</button>
+      </div>
+    </fieldset>
+
+    <div class="status" id="status">Готов</div>
+  </div>
+</main>
+
+<script>
+/* ============================================================
+   PixelBuffer — работа с ImageData напрямую (без getPixel/setPixel)
+   ============================================================ */
+class PixelBuffer {
+  constructor(w, h, data) {
+    this.width = w;
+    this.height = h;
+    this.data = data; // Uint8ClampedArray RGBA
+  }
+  static fromImage(img) {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth || img.width;
+    c.height = img.naturalHeight || img.height;
+    const ctx = c.getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+    const imgData = ctx.getImageData(0, 0, c.width, c.height);
+    return new PixelBuffer(c.width, c.height, imgData.data);
+  }
+  static blankLike(pb) {
+    return new PixelBuffer(pb.width, pb.height, new Uint8ClampedArray(pb.data.length));
+  }
+  toImageData() {
+    return new ImageData(new Uint8ClampedArray(this.data), this.width, this.height);
+  }
+  luminance(x, y) {
+    const i = (y * this.width + x) * 4;
+    return (this.data[i] * 299 + this.data[i+1] * 587 + this.data[i+2] * 114) / 1000;
+  }
+}
+
+/* ============================================================
+   МЕТОД 1: гистограмма, контрастирование, эквализация
+   ============================================================ */
+const Histogram = {
+  luma(pb) {
+    const h = new Uint32Array(256);
+    for (let i = 0; i < pb.data.length; i += 4) {
+      const L = (pb.data[i] * 299 + pb.data[i+1] * 587 + pb.data[i+2] * 114) / 1000 | 0;
+      h[L]++;
+    }
+    return h;
+  },
+  channel(pb, c) {
+    const h = new Uint32Array(256);
+    for (let i = c; i < pb.data.length; i += 4) h[pb.data[i]]++;
+    return h;
+  },
+
+  autoRange(pb, lowPct = 0.01, highPct = 0.99) {
+    const h = Histogram.luma(pb);
+    const total = pb.width * pb.height;
+    const loT = total * lowPct, hiT = total * highPct;
+    let acc = 0, min = 0, max = 255;
+    for (let v = 0; v < 256; v++) { acc += h[v]; if (acc >= loT) { min = v; break; } }
+    acc = 0;
+    for (let v = 0; v < 256; v++) { acc += h[v]; if (acc >= hiT) { max = v; break; } }
+    if (max <= min) max = Math.min(255, min + 1);
+    return { min, max };
+  },
+
+  linearContrast(pb, min, max) {
+    const dst = new Uint8ClampedArray(pb.data.length);
+    const k = 255 / Math.max(1, max - min);
+    for (let i = 0; i < pb.data.length; i += 4) {
+      dst[i]   = (pb.data[i]   - min) * k;
+      dst[i+1] = (pb.data[i+1] - min) * k;
+      dst[i+2] = (pb.data[i+2] - min) * k;
+      dst[i+3] = pb.data[i+3];
+    }
+    return new PixelBuffer(pb.width, pb.height, dst);
+  },
+
+  equalizeRGB(pb) {
+    const dst = new Uint8ClampedArray(pb.data.length);
+    const total = pb.width * pb.height;
+    for (let c = 0; c < 3; c++) {
+      const h = new Uint32Array(256);
+      for (let i = c; i < pb.data.length; i += 4) h[pb.data[i]]++;
+      const lut = new Uint8Array(256);
+      let acc = 0;
+      for (let v = 0; v < 256; v++) { acc += h[v]; lut[v] = (acc * 255 / total) | 0; }
+      for (let i = c; i < pb.data.length; i += 4) dst[i] = lut[pb.data[i]];
+    }
+    for (let i = 3; i < pb.data.length; i += 4) dst[i] = pb.data[i];
+    return new PixelBuffer(pb.width, pb.height, dst);
+  },
+
+  // HSV: строим LUT по V (яркости), затем масштабируем RGB пропорционально
+  equalizeHSV(pb) {
+    const dst = new Uint8ClampedArray(pb.data.length);
+    const N = pb.width * pb.height;
+    const lum = new Uint8Array(N);
+    const h = new Uint32Array(256);
+    for (let y = 0, k = 0; y < pb.height; y++)
+      for (let x = 0; x < pb.width; x++, k++) {
+        const i = (y * pb.width + x) * 4;
+        const L = (pb.data[i] * 299 + pb.data[i+1] * 587 + pb.data[i+2] * 114) / 1000 | 0;
+        lum[k] = L; h[L]++;
+      }
+    const lut = new Uint8Array(256);
+    let acc = 0;
+    for (let v = 0; v < 256; v++) { acc += h[v]; lut[v] = (acc * 255 / N) | 0; }
+
+    for (let y = 0, k = 0; y < pb.height; y++)
+      for (let x = 0; x < pb.width; x++, k++) {
+        const i = (y * pb.width + x) * 4;
+        const oldL = lum[k];
+        const scale = oldL === 0 ? 0 : lut[oldL] / oldL;
+        dst[i]   = pb.data[i]   * scale;
+        dst[i+1] = pb.data[i+1] * scale;
+        dst[i+2] = pb.data[i+2] * scale;
+        dst[i+3] = pb.data[i+3];
+      }
+    return new PixelBuffer(pb.width, pb.height, dst);
+  }
+};
+
+/* ============================================================
+   МЕТОД 2: высокочастотные фильтры
+   ============================================================ */
+const HighPass = {
+  // Разделяемая гауссова свёртка (clamp на краях)
+  gaussianBlur(pb, sigma) {
+    if (sigma <= 0) return new PixelBuffer(pb.width, pb.height,
+                                           new Uint8ClampedArray(pb.data));
+    const k = Math.ceil(sigma * 3);
+    const size = 2 * k + 1;
+    const kernel = new Float32Array(size);
+    let sum = 0;
+    for (let i = -k; i <= k; i++) {
+      const v = Math.exp(-(i * i) / (2 * sigma * sigma));
+      kernel[i + k] = v; sum += v;
+    }
+    for (let i = 0; i < size; i++) kernel[i] /= sum;
+
+    const W = pb.width, H = pb.height;
+    // Горизонтальный проход
+    const tmp = new Float32Array(pb.data.length);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        for (let c = 0; c < 3; c++) {
+          let acc = 0;
+          for (let t = -k; t <= k; t++) {
+            let xx = x + t;
+            if (xx < 0) xx = 0; else if (xx >= W) xx = W - 1;
+            acc += pb.data[(y * W + xx) * 4 + c] * kernel[t + k];
+          }
+          tmp[(y * W + x) * 4 + c] = acc;
+        }
+    // Вертикальный проход
+    const dst = new Uint8ClampedArray(pb.data.length);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        for (let c = 0; c < 3; c++) {
+          let acc = 0;
+          for (let t = -k; t <= k; t++) {
+            let yy = y + t;
+            if (yy < 0) yy = 0; else if (yy >= H) yy = H - 1;
+            acc += tmp[(yy * W + x) * 4 + c] * kernel[t + k];
+          }
+          dst[(y * W + x) * 4 + c] = acc;
+        }
+    for (let i = 3; i < dst.length; i += 4) dst[i] = pb.data[i];
+    return new PixelBuffer(W, H, dst);
+  },
+
+  unsharpMask(pb, amount, sigma) {
+    const low = HighPass.gaussianBlur(pb, sigma);
+    const dst = new Uint8ClampedArray(pb.data.length);
+    for (let i = 0; i < pb.data.length; i += 4) {
+      for (let c = 0; c < 3; c++) {
+        const high = pb.data[i + c] - low.data[i + c];
+        dst[i + c] = pb.data[i + c] + amount * high;
+      }
+      dst[i + 3] = pb.data[i + 3];
+    }
+    return new PixelBuffer(pb.width, pb.height, dst);
+  },
+
+  laplacianSharpen(pb, alpha) {
+    const W = pb.width, H = pb.height;
+    const K = [0, 1, 0, 1, -4, 1, 0, 1, 0];
+    const dst = new Uint8ClampedArray(pb.data.length);
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        for (let c = 0; c < 3; c++) {
+          let lap = 0;
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              let xx = x + dx, yy = y + dy;
+              if (xx < 0) xx = 0; else if (xx >= W) xx = W - 1;
+              if (yy < 0) yy = 0; else if (yy >= H) yy = H - 1;
+              lap += K[(dy + 1) * 3 + (dx + 1)] * pb.data[(yy * W + xx) * 4 + c];
+            }
+          dst[(y * W + x) * 4 + c] = pb.data[(y * W + x) * 4 + c] - alpha * lap;
+        }
+    for (let i = 3; i < dst.length; i += 4) dst[i] = pb.data[i];
+    return new PixelBuffer(W, H, dst);
+  }
+};
+
+/* ============================================================
+   UI
+   ============================================================ */
+const $ = (id) => document.getElementById(id);
+const cvSrc = $('cv-src'), cvDst = $('cv-dst'), chart = $('chart');
+
+let original = null;   // PixelBuffer исходного
+let current  = null;   // PixelBuffer текущего результата
+let srcImage = null;   // HTMLImageElement
+
+function status(t) { $('status').textContent = t; }
+
+function drawTo(canvas, pb) {
+  canvas.width  = pb.width;
+  canvas.height = pb.height;
+  const ctx = canvas.getContext('2d');
+  ctx.putImageData(pb.toImageData(), 0, 0);
+}
+
+function loadImage(img) {
+  srcImage = img;
+  original = PixelBuffer.fromImage(img);
+  current  = new PixelBuffer(original.width, original.height,
+                             new Uint8ClampedArray(original.data));
+  drawTo(cvSrc, original);
+  drawTo(cvDst, current);
+  $('btn-download').disabled = false;
+  drawHistogram(original);
+  status(`Загружено: ${original.width}×${original.height}`);
+}
+
+function reset() {
+  if (!original) return;
+  current = new PixelBuffer(original.width, original.height,
+                            new Uint8ClampedArray(original.data));
+  drawTo(cvDst, current);
+  drawHistogram(current);
+  status('Сброс к исходному');
+}
+
+/* ---------- Histogram chart ---------- */
+function drawHistogram(pb) {
+  const ctx = chart.getContext('2d');
+  const W = chart.clientWidth, H = chart.clientHeight || 200;
+  chart.width = W; chart.height = H;
+  ctx.clearRect(0, 0, W, H);
+
+  const hl = Histogram.luma(pb);
+  const hr = Histogram.channel(pb, 0); // B
+  const hg = Histogram.channel(pb, 1); // G
+  const hb = Histogram.channel(pb, 2); // R
+
+  // Ограничим пик, чтобы обрезать нулевой бин (фон)
+  const maxNonZero = (() => {
+    let m = 0;
+    for (let v = 1; v < 256; v++) m = Math.max(m, hl[v]);
+    return m || 1;
+  })();
+  const scaleY = (H - 20) / maxNonZero;
+
+  const drawSeries = (hist, color, fill) => {
+    ctx.beginPath();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1;
+    for (let v = 0; v < 256; v++) {
+      const x = (v / 255) * (W - 10) + 5;
+      const y = H - 10 - Math.min(H - 20, hist[v] * scaleY);
+      if (v === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  };
+  drawSeries(hr, 'rgba(255,80,80,0.9)');
+  drawSeries(hg, 'rgba(80,220,80,0.9)');
+  drawSeries(hb, 'rgba(80,140,255,0.9)');
+  drawSeries(hl, '#e6e6e6');
+
+  // Оси
+  ctx.strokeStyle = '#3a3d42';
+  ctx.beginPath();
+  ctx.moveTo(5, H - 10); ctx.lineTo(W - 5, H - 10);
+  ctx.stroke();
+  ctx.fillStyle = '#9aa0a6';
+  ctx.font = '11px sans-serif';
+  ctx.fillText('0', 4, H - 1);
+  ctx.fillText('255', W - 24, H - 1);
+}
+
+/* ---------- Events ---------- */
+$('drop').addEventListener('click', () => {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'image/*';
+  inp.onchange = () => {
+    if (!inp.files[0]) return;
+    const img = new Image();
+    img.onload = () => loadImage(img);
+    img.src = URL.createObjectURL(inp.files[0]);
+  };
+  inp.click();
+});
+
+const dropEl = $('drop');
+['dragenter', 'dragover'].forEach(ev =>
+  dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.add('hover'); }));
+['dragleave', 'drop'].forEach(ev =>
+  dropEl.addEventListener(ev, e => { e.preventDefault(); dropEl.classList.remove('hover'); }));
+dropEl.addEventListener('drop', e => {
+  const f = e.dataTransfer.files[0];
+  if (!f) return;
+  const img = new Image();
+  img.onload = () => loadImage(img);
+  img.src = URL.createObjectURL(f);
+});
+
+// Sliders
+$('sl-min').addEventListener('input', e => $('v-min').textContent = e.target.value);
+$('sl-max').addEventListener('input', e => $('v-max').textContent = e.target.value);
+$('sl-amount').addEventListener('input', e =>
+  $('v-amount').textContent = (e.target.value / 10).toFixed(1));
+$('sl-sigma').addEventListener('input', e =>
+  $('v-sigma').textContent = (e.target.value / 10).toFixed(1));
+
+// Method buttons
+$('btn-linear').addEventListener('click', () => {
+  if (!current) return;
+  let lo = +$('sl-min').value, hi = +$('sl-max').value;
+  if ($('chk-auto').checked) {
+    const r = Histogram.autoRange(current, 0.01, 0.99);
+    lo = r.min; hi = r.max;
+    $('sl-min').value = lo; $('v-min').textContent = lo;
+    $('sl-max').value = hi; $('v-max').textContent = hi;
+  }
+  const t0 = performance.now();
+  current = Histogram.linearContrast(current, lo, hi);
+  drawTo(cvDst, current);
+  drawHistogram(current);
+  status(`Линейное контрастирование: min=${lo}, max=${hi}, ` +
+         `${(performance.now() - t0).toFixed(1)} мс`);
+});
+
+$('btn-eq-rgb').addEventListener('click', () => {
+  if (!current) return;
+  const t0 = performance.now();
+  current = Histogram.equalizeRGB(current);
+  drawTo(cvDst, current);
+  drawHistogram(current);
+  status(`Эквализация RGB: ${(performance.now() - t0).toFixed(1)} мс`);
+});
+
+$('btn-eq-hsv').addEventListener('click', () => {
+  if (!current) return;
+  const t0 = performance.now();
+  current = Histogram.equalizeHSV(current);
+  drawTo(cvDst, current);
+  drawHistogram(current);
+  status(`Эквализация HSV (V): ${(performance.now() - t0).toFixed(1)} мс`);
+});
+
+$('btn-unsharp').addEventListener('click', () => {
+  if (!current) return;
+  const amount = +$('sl-amount').value / 10;
+  const sigma  = +$('sl-sigma').value / 10;
+  const t0 = performance.now();
+  current = HighPass.unsharpMask(current, amount, sigma);
+  drawTo(cvDst, current);
+  drawHistogram(current);
+  status(`Unsharp mask: amount=${amount}, sigma=${sigma}, ` +
+         `${(performance.now() - t0).toFixed(1)} мс`);
+});
+
+$('btn-laplacian').addEventListener('click', () => {
+  if (!current) return;
+  const alpha = +$('sl-amount').value / 10;
+  const t0 = performance.now();
+  current = HighPass.laplacianSharpen(current, alpha);
+  drawTo(cvDst, current);
+  drawHistogram(current);
+  status(`Лапласиан: alpha=${alpha}, ` +
+         `${(performance.now() - t0).toFixed(1)} мс`);
+});
+
+$('btn-reset').addEventListener('click', reset);
+
+$('btn-download').addEventListener('click', () => {
+  if (!current) return;
+  const a = document.createElement('a');
+  a.download = 'result.png';
+  a.href = cvDst.toDataURL('image/png');
+  a.click();
+});
+
+// Resize → redraw chart
+window.addEventListener('resize', () => { if (current) drawHistogram(current); });
+</script>
+</body>
+</html>
